@@ -405,4 +405,15 @@ Java_com_ufo_aicamera_MainActivity_predFromCaffe2(
 
 * Successfully tested at Samsung Galaxy S6
 
+* run the example
+```
+git clone https://github.com/wangnamu/AICamera_new.git
+unzip libs.zip in the root directory to get the static library
+create a folder named armeabi-v7a in AICamera/app/src/main/jni
+copy the static librarys to AICamera/app/src/main/jni/armeabi-v7a
+open AICamera project with android studio
+```
+
+
+
 
