@@ -1,10 +1,10 @@
 #pragma once
 
-#include <ATen/core/StorageImpl.h>
+#include <c10/core/StorageImpl.h>
 
-namespace at {
+namespace c10 {
 
-struct CAFFE2_API Storage {
+struct C10_API Storage {
  public:
   Storage() {}
   Storage(c10::intrusive_ptr<StorageImpl> ptr) : storage_impl_(std::move(ptr)) {}
@@ -151,6 +151,10 @@ struct CAFFE2_API Storage {
     return storage_impl_.unique();
   }
 
+  bool is_alias_of(const Storage& other) const {
+    return storage_impl_ == other.storage_impl_;
+  }
+
   void UniqueStorageShareExternalPointer(
       void* src,
       const caffe2::TypeMeta& data_type,
@@ -180,4 +184,4 @@ struct CAFFE2_API Storage {
   c10::intrusive_ptr<StorageImpl> storage_impl_;
 };
 
-} // namespace at
+} // namespace c10

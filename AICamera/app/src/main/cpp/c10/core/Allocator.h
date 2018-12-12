@@ -4,10 +4,10 @@
 #include <memory>
 
 #include <c10/Device.h>
-#include <ATen/core/UniqueVoidPtr.h>
+#include <c10/util/UniqueVoidPtr.h>
 #include <c10/util/Exception.h>
 
-namespace at {
+namespace c10 {
 
 // A DataPtr is a unique pointer (with an attached deleter and some
 // context for the deleter) to some memory, which also records what
@@ -18,7 +18,7 @@ namespace at {
 //
 class DataPtr {
  private:
-  detail::UniqueVoidPtr ptr_;
+  c10::detail::UniqueVoidPtr ptr_;
   Device device_;
 
  public:
@@ -64,16 +64,16 @@ class DataPtr {
 // NB: Device is NOT tested for here; a CUDA nullptr is as much a nullptr as a
 // CPU nullptr
 
-inline bool operator==(const at::DataPtr& dp, std::nullptr_t) noexcept {
+inline bool operator==(const DataPtr& dp, std::nullptr_t) noexcept {
   return !dp;
 }
-inline bool operator==(std::nullptr_t, const at::DataPtr& dp) noexcept {
+inline bool operator==(std::nullptr_t, const DataPtr& dp) noexcept {
   return !dp;
 }
-inline bool operator!=(const at::DataPtr& dp, std::nullptr_t) noexcept {
+inline bool operator!=(const DataPtr& dp, std::nullptr_t) noexcept {
   return dp;
 }
-inline bool operator!=(std::nullptr_t, const at::DataPtr& dp) noexcept {
+inline bool operator!=(std::nullptr_t, const DataPtr& dp) noexcept {
   return dp;
 }
 
@@ -100,7 +100,7 @@ inline bool operator!=(std::nullptr_t, const at::DataPtr& dp) noexcept {
 
 struct Allocator {
   virtual ~Allocator() {}
-  virtual at::DataPtr allocate(size_t n) const = 0;
+  virtual DataPtr allocate(size_t n) const = 0;
 
   // If this returns a non nullptr, it means that allocate()
   // is guaranteed to return a unique_ptr with this deleter attached;
@@ -122,18 +122,18 @@ struct Allocator {
 };
 
 // Question: is this still needed?
-struct CAFFE2_API InefficientStdFunctionContext {
+struct C10_API InefficientStdFunctionContext {
   std::unique_ptr<void, std::function<void(void*)>> ptr_;
   InefficientStdFunctionContext(
       std::unique_ptr<void, std::function<void(void*)>>&& ptr)
       : ptr_(std::move(ptr)) {}
-  static at::DataPtr makeDataPtr(
+  static DataPtr makeDataPtr(
       void* ptr,
       const std::function<void(void*)>& deleter,
       Device device);
 };
 
-} // namespace at
+} // namespace c10
 
 namespace caffe2 {
 
@@ -146,12 +146,12 @@ namespace caffe2 {
  *  Also note that this is not thraed-safe, and we assume this function will
  *  only be called during initialization.
  */
-CAFFE2_API void SetAllocator(at::DeviceType t, at::Allocator* alloc);
-CAFFE2_API at::Allocator* GetAllocator(const at::DeviceType& t);
+C10_API void SetAllocator(DeviceType t, Allocator* alloc);
+C10_API Allocator* GetAllocator(const DeviceType& t);
 
-template <at::DeviceType t>
+template <DeviceType t>
 struct AllocatorRegisterer {
-  explicit AllocatorRegisterer(at::Allocator* alloc) {
+  explicit AllocatorRegisterer(Allocator* alloc) {
     SetAllocator(t, alloc);
   }
 };

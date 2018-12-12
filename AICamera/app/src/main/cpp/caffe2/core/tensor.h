@@ -5,8 +5,9 @@
 #include "caffe2/core/tensor_impl.h"
 
 #include <ATen/core/UndefinedTensorImpl.h>
-#include <ATen/core/intrusive_ptr.h>
-#include "ATen/core/TensorOptions.h"
+#include <c10/util/intrusive_ptr.h>
+#include "ATen/core/Tensor.h"
+#include <c10/core/TensorOptions.h>
 
 namespace caffe2 {
 
@@ -51,6 +52,12 @@ class CAFFE2_API Tensor final {
   }
 
   /**
+   * @brief Creates a caffe2 tensor from an ATen tensor
+   */
+  explicit Tensor(const at::Tensor& tensor)
+      : impl_(std::move(tensor.getIntrusivePtr())) {}
+
+  /**
    * @brief Creates a tensor of the given dimension.
    *
    * Note that the actual data allocation is not going to be carried out until
@@ -61,6 +68,11 @@ class CAFFE2_API Tensor final {
     // and immediately discard it in Resize() since
     // reset_tensor will be true and FreeMemory will be called,
     // we might want to avoid creating Storage twice?
+    Resize(dims);
+  }
+
+  // we want to preserve index information
+  explicit Tensor(at::IntList dims, at::Device device): Tensor(device) {
     Resize(dims);
   }
 
@@ -92,23 +104,22 @@ class CAFFE2_API Tensor final {
     return impl_.get()->GetDevice();
   }
 
-  void CopyFrom(const Tensor& src, BaseContext* context = nullptr) const {
-    impl_.get()->CopyFrom(*src.impl_.get(), context);
+  void CopyFrom(const Tensor& src, bool async = false) const {
+    impl_.get()->CopyFrom(*src.impl_.get(), async);
   }
 
   /**
    * @brief Extend the outer-most dimension of this tensor
    *        to dimension of `num`.
    */
-  void ExtendTo(int64_t num, float growthPct, BaseContext* context) const {
+  void ExtendTo(int64_t num, float growthPct) const {
     CAFFE_ENFORCE_GE_WITH_CALLER(impl_->dim(), 1);
     CAFFE_ENFORCE_GE_WITH_CALLER(growthPct, 0);
-    CAFFE_ENFORCE(context != nullptr, "Context must be provided.");
-    Extend(num - impl_->size(0), growthPct, context);
+    Extend(num - impl_->size(0), growthPct);
   }
 
-  void Extend(int64_t num, float growthPct, BaseContext* context) const {
-    impl_.get()->Extend(num, growthPct, context);
+  void Extend(int64_t num, float growthPct) const {
+    impl_.get()->Extend(num, growthPct);
   }
 
   /**
@@ -239,6 +250,11 @@ class CAFFE2_API Tensor final {
       const TypeMeta& data_type,
       size_t capacity) {
     impl_.get()->ShareExternalPointer(std::move(data_ptr), data_type, capacity);
+  }
+
+  const c10::intrusive_ptr<TensorImpl, UndefinedTensorImpl>& getIntrusivePtr()
+      const {
+    return impl_;
   }
 
   /**
@@ -446,7 +462,7 @@ CAFFE2_API void ReinitializeAndCopyFrom(
     Tensor* t,
     at::TensorOptions options,
     const Tensor& src,
-    BaseContext* context = nullptr);
+    bool async = false);
 
 CAFFE_DECLARE_PREALLOCATED_KNOWN_TYPE(12, Tensor)
 

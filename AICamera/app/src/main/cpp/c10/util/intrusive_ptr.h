@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ATen/core/ATenGeneral.h>
 #include <c10/util/C++17.h>
 #include <c10/util/Exception.h>
 #include <atomic>
@@ -33,7 +32,7 @@ namespace c10 {
 // tells us if the object was allocated by us.  If it wasn't, no
 // intrusive_ptr for you!
 
-class CAFFE2_API intrusive_ptr_target {
+class C10_API intrusive_ptr_target {
   // Note [Weak references for intrusive refcounting]
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   // Here's the scheme:
@@ -73,26 +72,37 @@ class CAFFE2_API intrusive_ptr_target {
 // We also have to disable -Wunknown-warning-option and -Wpragmas, because
 // some other compilers don't know about -Wterminate or -Wexceptions and
 // will show a warning about unknown warning options otherwise.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpragmas"
-#pragma GCC diagnostic ignored "-Wunknown-warning-option"
-#pragma GCC diagnostic ignored "-Wterminate"
-#pragma GCC diagnostic ignored "-Wexceptions"
+#ifdef _MSC_VER
+#  pragma warning(push)  
+#  pragma warning(disable: 4297) // function assumed not to throw an exception but does  
+#else  
+#  pragma GCC diagnostic push  
+#  pragma GCC diagnostic ignored "-Wpragmas"  
+#  pragma GCC diagnostic ignored "-Wunknown-warning-option"  
+#  pragma GCC diagnostic ignored "-Wterminate"  
+#  pragma GCC diagnostic ignored "-Wexceptions"  
+#endif
     AT_ASSERTM(
         refcount_.load() == 0,
         "Tried to destruct an intrusive_ptr_target that still has intrusive_ptr to it");
     AT_ASSERTM(
         weakcount_.load() == 0,
         "Tried to destruct an intrusive_ptr_target that still has weak_intrusive_ptr to it");
-#pragma GCC diagnostic pop
+#ifdef _MSC_VER
+#  pragma warning(pop)  
+#else  
+#  pragma GCC diagnostic pop  
+#endif
   }
 
   constexpr intrusive_ptr_target() noexcept : refcount_(0), weakcount_(0) {}
 
-  // intrusive_ptr_target supports move: but refcount and weakcount don't
+  // intrusive_ptr_target supports copy and move: but refcount and weakcount don't
   // participate (since they are intrinsic properties of the memory location)
   intrusive_ptr_target(intrusive_ptr_target&& other) noexcept : intrusive_ptr_target() {}
   intrusive_ptr_target& operator=(intrusive_ptr_target&& other) noexcept { return *this; }
+  intrusive_ptr_target(const intrusive_ptr_target& other) noexcept : intrusive_ptr_target() {}
+  intrusive_ptr_target& operator=(const intrusive_ptr_target& other) noexcept { return *this; }
 
  private:
   /**
@@ -114,7 +124,7 @@ class CAFFE2_API intrusive_ptr_target {
 
 namespace detail {
 template <class TTarget>
-struct C10_EXPORT intrusive_target_default_null_type final {
+struct intrusive_target_default_null_type final {
   static constexpr TTarget* singleton() noexcept {
     return nullptr;
   }
@@ -136,7 +146,7 @@ class weak_intrusive_ptr;
 template <
     class TTarget,
     class NullType = detail::intrusive_target_default_null_type<TTarget>>
-class C10_EXPORT intrusive_ptr final {
+class intrusive_ptr final {
  private:
 //  the following static assert would be nice to have but it requires
 //  the target class T to be fully defined when intrusive_ptr<T> is instantiated
@@ -394,7 +404,7 @@ inline bool operator!=(
 template <
     typename TTarget,
     class NullType = detail::intrusive_target_default_null_type<TTarget>>
-class C10_EXPORT weak_intrusive_ptr final {
+class weak_intrusive_ptr final {
  private:
   static_assert(
       std::is_base_of<intrusive_ptr_target, TTarget>::value,
@@ -742,13 +752,13 @@ namespace std {
 // To allow intrusive_ptr and weak_intrusive_ptr inside std::unordered_map or
 // std::unordered_set, we need std::hash
 template <class TTarget, class NullType>
-struct C10_EXPORT hash<c10::intrusive_ptr<TTarget, NullType>> {
+struct hash<c10::intrusive_ptr<TTarget, NullType>> {
   size_t operator()(const c10::intrusive_ptr<TTarget, NullType>& x) const {
     return std::hash<TTarget*>()(x.get());
   }
 };
 template <class TTarget, class NullType>
-struct C10_EXPORT hash<c10::weak_intrusive_ptr<TTarget, NullType>> {
+struct hash<c10::weak_intrusive_ptr<TTarget, NullType>> {
   size_t operator()(const c10::weak_intrusive_ptr<TTarget, NullType>& x) const {
     return std::hash<TTarget*>()(x._unsafe_get_target());
   }

@@ -1,20 +1,21 @@
 #pragma once
 
-#include <ATen/core/Backend.h>
-#include <ATen/core/DefaultTensorOptions.h>
+#include <c10/core/DefaultDtype.h>
+#include <c10/core/Backend.h>
+#include <c10/core/Layout.h>
+#include <c10/core/ScalarType.h>
+#include <c10/core/ScalarTypeUtils.h>
 #include <c10/Device.h>
-#include <ATen/core/Layout.h>
-#include <ATen/core/ScalarType.h>
-#include <ATen/core/ScalarTypeUtils.h>
 
-#include "c10/util/Optional.h"
-#include "c10/util/C++17.h"
+#include <c10/util/Optional.h>
+#include <c10/util/C++17.h>
+#include <c10/macros/Macros.h>
 
 #include <cstddef>
 #include <iosfwd>
 #include <utility>
 
-namespace at {
+namespace c10 {
 /// A class to encapsulate construction axes of an Tensor.  TensorOptions was
 /// designed to support the Python style API for specifying construction options
 /// on factory functions, e.g.,
@@ -96,7 +97,7 @@ namespace at {
 /// resolution is done before template resolution, our problem is solved.
 
 
-struct CAFFE2_API TensorOptions {
+struct C10_API TensorOptions {
   TensorOptions()
     : requires_grad_(false)
     , is_variable_(false)
@@ -171,7 +172,7 @@ struct CAFFE2_API TensorOptions {
 
   /// Return a copy of `TensorOptions` with `device` set to the given one, or
   /// cleared if `device` is `nullopt`.
-  C10_NODISCARD TensorOptions device(optional<Device> device) const noexcept {
+  C10_NODISCARD TensorOptions device(c10::optional<Device> device) const noexcept {
     TensorOptions r = *this;
     r.set_device(device);
     return r;
@@ -182,7 +183,7 @@ struct CAFFE2_API TensorOptions {
   /// for Device work correctly.)
   template<typename ... Args>
   C10_NODISCARD TensorOptions device(Args&&... args) const noexcept {
-    return device(optional<Device>(c10::in_place, std::forward<Args>(args)...));
+    return device(c10::optional<Device>(c10::in_place, std::forward<Args>(args)...));
   }
 
   /// Return a copy of `TensorOptions`, but with device set to CUDA, and the
@@ -195,14 +196,14 @@ struct CAFFE2_API TensorOptions {
   }
 
   /// Return a copy of `TensorOptions` with `dtype` set to the given one.
-  C10_NODISCARD TensorOptions dtype(optional<caffe2::TypeMeta> dtype) const noexcept {
+  C10_NODISCARD TensorOptions dtype(c10::optional<caffe2::TypeMeta> dtype) const noexcept {
     TensorOptions r = *this;
     r.set_dtype(dtype);
     return r;
   }
 
   // legacy function to support ScalarType
-  C10_NODISCARD TensorOptions dtype(optional<ScalarType> dtype) const noexcept {
+  C10_NODISCARD TensorOptions dtype(c10::optional<ScalarType> dtype) const noexcept {
     TensorOptions r = *this;
     r.set_dtype(dtype);
     return r;
@@ -217,21 +218,21 @@ struct CAFFE2_API TensorOptions {
   }
 
   /// Sets the layout of the `TensorOptions`.
-  C10_NODISCARD TensorOptions layout(optional<Layout> layout) const noexcept {
+  C10_NODISCARD TensorOptions layout(c10::optional<Layout> layout) const noexcept {
     TensorOptions r = *this;
     r.set_layout(layout);
     return r;
   }
 
   /// Sets the `requires_grad` property of the `TensorOptions`.
-  C10_NODISCARD TensorOptions requires_grad(optional<bool> requires_grad) const noexcept {
+  C10_NODISCARD TensorOptions requires_grad(c10::optional<bool> requires_grad) const noexcept {
     TensorOptions r = *this;
     r.set_requires_grad(requires_grad);
     return r;
   }
 
   /// Sets the `is_variable` property on the `TensorOptions`.
-  C10_NODISCARD TensorOptions is_variable(optional<bool> is_variable) const noexcept {
+  C10_NODISCARD TensorOptions is_variable(c10::optional<bool> is_variable) const noexcept {
     TensorOptions r = *this;
     r.set_is_variable(is_variable);
     return r;
@@ -239,7 +240,7 @@ struct CAFFE2_API TensorOptions {
 
   /// Returns the device of the `TensorOptions`.
   Device device() const noexcept {
-    return has_device_ ? device_ : getDefaultTensorOptions().device();
+    return has_device_ ? device_ : Device(kCPU);
   }
 
   /// Returns whether the device is specified.
@@ -249,7 +250,7 @@ struct CAFFE2_API TensorOptions {
 
   /// Returns the device of the `TensorOptions`, or `c10::nullopt` if
   /// device is not specified.
-  optional<Device> device_opt() const noexcept {
+  c10::optional<Device> device_opt() const noexcept {
     return has_device_ ? c10::make_optional(device_) : c10::nullopt;
   }
 
@@ -260,7 +261,7 @@ struct CAFFE2_API TensorOptions {
 
   /// Returns the dtype of the `TensorOptions`.
   caffe2::TypeMeta dtype() const noexcept {
-    return has_dtype_ ? dtype_ : getDefaultTensorOptions().dtype();
+    return has_dtype_ ? dtype_ : get_default_dtype();
   }
 
   /// Returns whether the dtype is specified.
@@ -270,13 +271,13 @@ struct CAFFE2_API TensorOptions {
 
   /// Returns the dtype of the `TensorOptions`, or `c10::nullopt` if
   /// device is not specified.
-  optional<caffe2::TypeMeta> dtype_opt() const noexcept {
+  c10::optional<caffe2::TypeMeta> dtype_opt() const noexcept {
     return has_dtype_ ? c10::make_optional(dtype_) : c10::nullopt;
   }
 
   /// Returns the layout of the `TensorOptions`.
   Layout layout() const noexcept {
-    return has_layout_ ? layout_ : getDefaultTensorOptions().layout();
+    return has_layout_ ? layout_ : kStrided;
   }
 
   /// Returns whether the layout is specified.
@@ -286,13 +287,13 @@ struct CAFFE2_API TensorOptions {
 
   /// Returns the layout of the `TensorOptions`, or `c10::nullopt` if
   /// layout is not specified.
-  optional<Layout> layout_opt() const noexcept {
+  c10::optional<Layout> layout_opt() const noexcept {
     return has_layout_ ? c10::make_optional(layout_) : c10::nullopt;
   }
 
   /// Returns the `requires_grad` property of the `TensorOptions`.
   bool requires_grad() const noexcept {
-    return has_requires_grad_ ? requires_grad_ : getDefaultTensorOptions().requires_grad();
+    return has_requires_grad_ ? requires_grad_ : false;
   }
 
   /// Returns whether the `requires_grad` is specified.
@@ -302,14 +303,14 @@ struct CAFFE2_API TensorOptions {
 
   /// Returns the `requires_grad` property of the `TensorOptions`, or
   /// `c10::nullopt` if `requires_grad` is not specified.
-  optional<bool> requires_grad_opt() const noexcept {
+  c10::optional<bool> requires_grad_opt() const noexcept {
     return has_requires_grad_ ? c10::make_optional(requires_grad_)
                               : c10::nullopt;
   }
 
   /// Returns the `is_variable` property of the `TensorOptions`.
   bool is_variable() const noexcept {
-    return has_is_variable_ ? is_variable_ : getDefaultTensorOptions().is_variable();
+    return has_is_variable_ ? is_variable_ : false;
   }
 
   /// Returns whether the `is_variable` is specified.
@@ -319,7 +320,7 @@ struct CAFFE2_API TensorOptions {
 
   /// Returns the `is_variable` property of the `TensorOptions`, or
   /// `c10::nullopt` if `is_variable` is not specified.
-  optional<bool> is_variable_opt() const noexcept {
+  c10::optional<bool> is_variable_opt() const noexcept {
     return has_is_variable_ ? c10::make_optional(is_variable_) : c10::nullopt;
   }
 
@@ -349,7 +350,7 @@ struct CAFFE2_API TensorOptions {
   // on temporaries.)
 
   /// Mutably set the device of `TensorOptions`.
-  void set_device(optional<Device> device) & noexcept {
+  void set_device(c10::optional<Device> device) & noexcept {
     if (device) {
       device_ = *device;
       has_device_ = true;
@@ -359,7 +360,7 @@ struct CAFFE2_API TensorOptions {
   }
 
   /// Mutably set the dtype of `TensorOptions`.
-  void set_dtype(optional<caffe2::TypeMeta> dtype) & noexcept {
+  void set_dtype(c10::optional<caffe2::TypeMeta> dtype) & noexcept {
     if (dtype) {
       dtype_ = *dtype;
       has_dtype_ = true;
@@ -369,7 +370,7 @@ struct CAFFE2_API TensorOptions {
   }
 
   // legacy function to support ScalarType
-  void set_dtype(optional<ScalarType> dtype) & noexcept {
+  void set_dtype(c10::optional<ScalarType> dtype) & noexcept {
     if (dtype) {
       dtype_ = scalarTypeToTypeMeta(*dtype);
       has_dtype_ = true;
@@ -379,7 +380,7 @@ struct CAFFE2_API TensorOptions {
   }
 
   /// Mutably set the layout of `TensorOptions`.
-  void set_layout(optional<Layout> layout) & noexcept {
+  void set_layout(c10::optional<Layout> layout) & noexcept {
     if (layout) {
       layout_ = *layout;
       has_layout_ = true;
@@ -389,7 +390,7 @@ struct CAFFE2_API TensorOptions {
   }
 
   /// Mutably set the `requires_grad` property of `TensorOptions`.
-  void set_requires_grad(optional<bool> requires_grad) & noexcept {
+  void set_requires_grad(c10::optional<bool> requires_grad) & noexcept {
     if (requires_grad) {
       requires_grad_ = *requires_grad;
       has_requires_grad_ = true;
@@ -399,7 +400,7 @@ struct CAFFE2_API TensorOptions {
   }
 
   /// Mutably set the `is_variable` property of `TensorOptions`.
-  void set_is_variable(optional<bool> is_variable) & noexcept {
+  void set_is_variable(c10::optional<bool> is_variable) & noexcept {
     if (is_variable) {
       is_variable_ = *is_variable;
       has_is_variable_ = true;
@@ -472,33 +473,85 @@ inline TensorOptions requires_grad(bool requires_grad = true) {
   return TensorOptions().requires_grad(requires_grad);
 }
 
-CAFFE2_API std::ostream& operator<<(
+C10_API std::ostream& operator<<(
     std::ostream& stream,
     const TensorOptions& options);
-
-
-DefaultTensorOptions& DefaultTensorOptions::merge(const TensorOptions& options) {
-  if (options.dtype_opt().has_value()) {
-    dtype_ = options.dtype();
-  }
-  if (options.device_opt().has_value()) {
-    device_ = options.device();
-  }
-  if (options.layout_opt().has_value()) {
-    layout_ = options.layout();
-  }
-  if (options.requires_grad_opt().has_value()) {
-    requires_grad_ = options.requires_grad();
-  }
-  if (options.is_variable_opt().has_value()) {
-    is_variable_ = options.is_variable();
-  }
-  return *this;
-}
 
 template <typename T>
 inline TensorOptions dtype() {
   return dtype(caffe2::TypeMeta::Make<T>());
 }
 
-} // namespace at
+// This is intended to be a centralized location by which we can determine
+// what an appropriate TensorTypeId for a tensor is.
+//
+// This takes a TensorOptions, rather than just a DeviceType and Layout, because
+// we reserve the right to change dispatch based on *any* aspect of
+// TensorOptions.  WARNING: If you do this, you need to fix the calls
+// to computeTensorTypeId in caffe2/tensor.h
+inline TensorTypeId computeTensorTypeId(TensorOptions options) {
+  switch (options.layout()) {
+    case Layout::Strided:
+      switch (options.device().type()) {
+        case DeviceType::CPU:
+          return CPUTensorId();
+        case DeviceType::CUDA:
+          return CUDATensorId();
+        case DeviceType::MKLDNN:
+          return MKLDNNTensorId();
+        case DeviceType::OPENGL:
+          return OpenGLTensorId();
+        case DeviceType::OPENCL:
+          return OpenCLTensorId();
+        case DeviceType::IDEEP:
+          return IDEEPTensorId();
+        case DeviceType::HIP:
+          return HIPTensorId();
+        default:
+          AT_ERROR("Unsupported device type for dense layout: ", options.device().type());
+      }
+    case Layout::Sparse:
+      switch (options.device().type()) {
+        case DeviceType::CPU:
+          return SparseCPUTensorId();
+        case DeviceType::CUDA:
+          return SparseCUDATensorId();
+        case DeviceType::HIP:
+          return SparseHIPTensorId();
+        default:
+          AT_ERROR("Unsupported device type for sparse layout: ", options.device().type());
+      }
+    default:
+      AT_ERROR("Unsupported layout: ", options.layout());
+  }
+}
+
+inline DeviceType computeDeviceType(TensorTypeId tid) {
+  if (tid == CPUTensorId()) {
+    return DeviceType::CPU;
+  } else if (tid == CUDATensorId()) {
+    return DeviceType::CUDA;
+  } else if (tid == HIPTensorId()) {
+    return DeviceType::HIP;
+  } else if (tid == MKLDNNTensorId()) {
+    return DeviceType::MKLDNN;
+  } else if (tid == OpenGLTensorId()) {
+    return DeviceType::IDEEP;
+  } else if (tid == OpenCLTensorId()) {
+    return DeviceType::OPENCL;
+  } else if (tid == IDEEPTensorId()) {
+    return DeviceType::IDEEP;
+  } else if (tid == HIPTensorId()) {
+    return DeviceType::HIP;
+  } else if (tid == SparseCPUTensorId()) {
+    return DeviceType::CPU;
+  } else if (tid == SparseCUDATensorId()) {
+    return DeviceType::CUDA;
+  } else if (tid == SparseHIPTensorId()) {
+    return DeviceType::HIP;
+  } else {
+    AT_ASSERTM(false, "Unknown TensorTypeId: ", tid);
+  }
+}
+
+} // namespace c10

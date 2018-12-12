@@ -1,11 +1,12 @@
-#pragma once
+#ifndef TENSOR_TYPE_ID_H_
+#define TENSOR_TYPE_ID_H_
 
 #include <iostream>
 #include <string>
-#include "c10/util/IdWrapper.h"
 #include "c10/macros/Macros.h"
+#include "c10/util/IdWrapper.h"
 
-namespace at {
+namespace c10 {
 
 namespace details {
 using _tensorTypeId_underlyingType = uint8_t;
@@ -15,7 +16,7 @@ using _tensorTypeId_underlyingType = uint8_t;
  * Dynamic type ID of a Tensor argument.  It represents something like
  * CPUTensor, etc.
  */
-class CAFFE2_API TensorTypeId final
+class C10_API TensorTypeId final
     : public at::
           IdWrapper<TensorTypeId, details::_tensorTypeId_underlyingType> {
  public:
@@ -30,11 +31,13 @@ class CAFFE2_API TensorTypeId final
       : IdWrapper(id) {}
 
   friend class TensorTypeIdCreator;
-  friend CAFFE2_API std::ostream& operator<<(std::ostream&, TensorTypeId);
+  friend C10_API std::ostream& operator<<(std::ostream&, TensorTypeId);
 };
 
-CAFFE2_API std::ostream& operator<<(std::ostream&, at::TensorTypeId);
+C10_API std::ostream& operator<<(std::ostream&, c10::TensorTypeId);
 
-} // namespace at
+} // namespace c10
 
-C10_DEFINE_HASH_FOR_IDWRAPPER(at::TensorTypeId)
+C10_DEFINE_HASH_FOR_IDWRAPPER(c10::TensorTypeId)
+
+#endif // TENSOR_TYPE_ID_H_
