@@ -1,7 +1,7 @@
 # AICamera_new
-Recompile the library with caffe2 in pytorch1.0 and re-implement the AICamera example provided by caffe2 officially.
+Recompile the library with caffe2 in pytorch stable(1.0) and re-implement the AICamera example provided by caffe2 officially.
 
-## caffe2 in pytorch1.0 compile and run on android
+## caffe2 in pytorch stable(1.0) compile and run on android
 
 ### Compile the android static library inside caffe2
 
@@ -52,6 +52,15 @@ pytorch/aten/src/ATen
 pytorch/c10
 pytorch/third_party/protobuf/src/google/protobuf 
 ```
+* then perform the following operations
+
+```
+copy pytorch/build_android/c10/macros/cmake_macros.h to app/src/main/cpp/c10/macros
+
+copy header file inside pytorch/build_android/caffe2/proto to app/src/main/cpp/caffe2/proto
+
+```
+
 
 * CMakeLists.txt like this
 
