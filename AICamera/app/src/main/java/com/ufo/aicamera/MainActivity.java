@@ -57,15 +57,15 @@ public class MainActivity extends AppCompatActivity {
     private AssetManager mgr;
     private boolean processing = false;
     private Image image = null;
-    private boolean run_HWC = false;
-
+    private int mSensorOrientation;
 
     static {
         System.loadLibrary("native-lib");
     }
 
-    public native String predFromCaffe2(int h, int w, byte[] Y, byte[] U, byte[] V,
-                                                  int rowStride, int pixelStride, boolean r_hwc);
+
+    public native String predFromCaffe2(byte[] Y, byte[] U, byte[] V, int width, int height, int y_row_stride,
+                                        int uv_row_stride, int uv_pixel_stride, int scale_width, int scale_height, int degree);
 
     public native void initCaffe2(AssetManager mgr);
 
@@ -100,7 +100,7 @@ public class MainActivity extends AppCompatActivity {
         textureView = (TextureView) findViewById(R.id.textureView);
         textureView.setSystemUiVisibility(SYSTEM_UI_FLAG_IMMERSIVE);
         final GestureDetector gestureDetector = new GestureDetector(this.getApplicationContext(),
-                new GestureDetector.SimpleOnGestureListener(){
+                new GestureDetector.SimpleOnGestureListener() {
                     @Override
                     public boolean onDoubleTap(MotionEvent e) {
                         return true;
@@ -142,14 +142,17 @@ public class MainActivity extends AppCompatActivity {
             //open your camera here
             openCamera();
         }
+
         @Override
         public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
             // Transform you image captured size according to the surface width and height
         }
+
         @Override
         public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
             return false;
         }
+
         @Override
         public void onSurfaceTextureUpdated(SurfaceTexture surface) {
         }
@@ -160,21 +163,25 @@ public class MainActivity extends AppCompatActivity {
             cameraDevice = camera;
             createCameraPreview();
         }
+
         @Override
         public void onDisconnected(CameraDevice camera) {
             cameraDevice.close();
         }
+
         @Override
         public void onError(CameraDevice camera, int error) {
             cameraDevice.close();
             cameraDevice = null;
         }
     };
+
     protected void startBackgroundThread() {
         mBackgroundThread = new HandlerThread("Camera Background");
         mBackgroundThread.start();
         mBackgroundHandler = new Handler(mBackgroundThread.getLooper());
     }
+
     protected void stopBackgroundThread() {
         mBackgroundThread.quitSafely();
         try {
@@ -192,8 +199,8 @@ public class MainActivity extends AppCompatActivity {
             assert texture != null;
             texture.setDefaultBufferSize(imageDimension.getWidth(), imageDimension.getHeight());
             Surface surface = new Surface(texture);
-            int width = 227;
-            int height = 227;
+            final int width = 227;
+            final int height = 227;
             ImageReader reader = ImageReader.newInstance(width, height, ImageFormat.YUV_420_888, 4);
             ImageReader.OnImageAvailableListener readerListener = new ImageReader.OnImageAvailableListener() {
                 @Override
@@ -212,8 +219,13 @@ public class MainActivity extends AppCompatActivity {
                         ByteBuffer Ubuffer = image.getPlanes()[1].getBuffer();
                         ByteBuffer Vbuffer = image.getPlanes()[2].getBuffer();
                         // TODO: use these for proper image processing on different formats.
-                        int rowStride = image.getPlanes()[1].getRowStride();
-                        int pixelStride = image.getPlanes()[1].getPixelStride();
+
+                        final int yRowStride = image.getPlanes()[0].getRowStride();
+                        final int uvRowStride = image.getPlanes()[1].getRowStride();
+
+                        final int uvPixelStride = image.getPlanes()[1].getPixelStride();
+
+
                         byte[] Y = new byte[Ybuffer.capacity()];
                         byte[] U = new byte[Ubuffer.capacity()];
                         byte[] V = new byte[Vbuffer.capacity()];
@@ -221,8 +233,8 @@ public class MainActivity extends AppCompatActivity {
                         Ubuffer.get(U);
                         Vbuffer.get(V);
 
-                        predictedClass = predFromCaffe2(h, w, Y, U, V,
-                                rowStride, pixelStride, run_HWC);
+                        predictedClass = predFromCaffe2(Y, U, V, w, h, yRowStride, uvRowStride,
+                                uvPixelStride, width, height, mSensorOrientation);
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
@@ -243,7 +255,7 @@ public class MainActivity extends AppCompatActivity {
             captureRequestBuilder.addTarget(surface);
             captureRequestBuilder.addTarget(reader.getSurface());
 
-            cameraDevice.createCaptureSession(Arrays.asList(surface, reader.getSurface()), new CameraCaptureSession.StateCallback(){
+            cameraDevice.createCaptureSession(Arrays.asList(surface, reader.getSurface()), new CameraCaptureSession.StateCallback() {
                 @Override
                 public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
                     if (null == cameraDevice) {
@@ -252,6 +264,7 @@ public class MainActivity extends AppCompatActivity {
                     cameraCaptureSessions = cameraCaptureSession;
                     updatePreview();
                 }
+
                 @Override
                 public void onConfigureFailed(@NonNull CameraCaptureSession cameraCaptureSession) {
                     Toast.makeText(MainActivity.this, "Configuration change", Toast.LENGTH_SHORT).show();
@@ -261,6 +274,7 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
         }
     }
+
     private void openCamera() {
         CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
         try {
@@ -269,6 +283,8 @@ public class MainActivity extends AppCompatActivity {
             StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
             assert map != null;
             imageDimension = map.getOutputSizes(SurfaceTexture.class)[0];
+            mSensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
+
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQUEST_CAMERA_PERMISSION);
                 return;
@@ -280,7 +296,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     protected void updatePreview() {
-        if(null == cameraDevice) {
+        if (null == cameraDevice) {
             return;
         }
         captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
@@ -297,6 +313,7 @@ public class MainActivity extends AppCompatActivity {
             cameraDevice = null;
         }
     }
+
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         if (requestCode == REQUEST_CAMERA_PERMISSION) {
@@ -306,6 +323,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     }
+
     @Override
     protected void onResume() {
         super.onResume();
@@ -323,7 +341,6 @@ public class MainActivity extends AppCompatActivity {
         stopBackgroundThread();
         super.onPause();
     }
-
 
 
 }

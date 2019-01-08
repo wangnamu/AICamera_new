@@ -178,6 +178,17 @@ set_target_properties(
         ${CMAKE_CURRENT_LIST_DIR}/src/main/jni/${ANDROID_ABI}/libqnnpack.a
 )
 
+add_library(
+        libyuv_static
+        STATIC
+        IMPORTED
+)
+set_target_properties(
+        libyuv_static
+        PROPERTIES IMPORTED_LOCATION
+        ${CMAKE_CURRENT_LIST_DIR}/src/main/jni/${ANDROID_ABI}/libyuv_static.a
+)
+
 
 include_directories(src/main/cpp)
 
@@ -211,6 +222,8 @@ target_link_libraries( # Specifies the target library.
         caffe2_protos
         c10
         libqnnpack
+
+        libyuv_static
 
         cpufeatures
 
