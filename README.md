@@ -238,6 +238,16 @@ set_target_properties(
         ${CMAKE_CURRENT_LIST_DIR}/src/main/jni/${ANDROID_ABI}/libqnnpack.a
 )
 
+add_library(
+        libyuv_static
+        STATIC
+        IMPORTED
+)
+set_target_properties(
+        libyuv_static
+        PROPERTIES IMPORTED_LOCATION
+        ${CMAKE_CURRENT_LIST_DIR}/src/main/jni/${ANDROID_ABI}/libyuv_static.a
+)
 
 include_directories(src/main/cpp)
 
@@ -267,6 +277,7 @@ target_link_libraries( # Specifies the target library.
         caffe2_protos
         c10
         libqnnpack
+        libyuv_static
         cpufeatures
         ${log-lib}
         ${android-lib})
@@ -284,80 +295,123 @@ JNIEXPORT jstring JNICALL
 Java_com_ufo_aicamera_MainActivity_predFromCaffe2(
         JNIEnv *env,
         jobject /* this */,
-        jint h, jint w, jbyteArray Y, jbyteArray U, jbyteArray V,
-        jint rowStride, jint pixelStride,
-        jboolean infer_HWC) {
+        jbyteArray y, jbyteArray u, jbyteArray v,
+        jint width, jint height, jint y_row_stride,
+        jint uv_row_stride, jint uv_pixel_stride,
+        jint scale_width, jint scale_height, jint degree) {
+
     if (!_predictor) {
         return env->NewStringUTF("Loading...");
     }
-    jsize Y_len = env->GetArrayLength(Y);
-    jbyte * Y_data = env->GetByteArrayElements(Y, 0);
-    assert(Y_len <= MAX_DATA_SIZE);
-    jsize U_len = env->GetArrayLength(U);
-    jbyte * U_data = env->GetByteArrayElements(U, 0);
-    assert(U_len <= MAX_DATA_SIZE);
-    jsize V_len = env->GetArrayLength(V);
-    jbyte * V_data = env->GetByteArrayElements(V, 0);
-    assert(V_len <= MAX_DATA_SIZE);
 
-#define min(a,b) ((a) > (b)) ? (b) : (a)
-#define max(a,b) ((a) > (b)) ? (a) : (b)
 
-    auto h_offset = max(0, (h - IMG_H) / 2);
-    auto w_offset = max(0, (w - IMG_W) / 2);
+    jbyte *const y_buff = env->GetByteArrayElements(y, 0);
+    jbyte *const u_buff = env->GetByteArrayElements(u, 0);
+    jbyte *const v_buff = env->GetByteArrayElements(v, 0);
 
-    auto iter_h = IMG_H;
-    auto iter_w = IMG_W;
-    if (h < IMG_H) {
-        iter_h = h;
+    uint8_t* argb = new uint8_t[scale_width * scale_height * 4];
+
+
+    const int y_plane_length = width * height;
+    const int uv_plane_length = y_plane_length / 4;
+    const int buffer_length = y_plane_length + uv_plane_length * 2;
+    std::unique_ptr<uint8_t> buffer(new uint8_t[buffer_length]);
+
+    libyuv::Android420ToI420(
+            reinterpret_cast<uint8_t *>(y_buff),
+            y_row_stride,
+            reinterpret_cast<uint8_t *>(u_buff),
+            uv_row_stride,
+            reinterpret_cast<uint8_t *>(v_buff),
+            uv_row_stride,
+            uv_pixel_stride,
+            buffer.get(),
+            width,
+            buffer.get() + y_plane_length,
+            width / 2,
+            buffer.get() + y_plane_length + uv_plane_length,
+            width / 2,
+            width,
+            height
+    );
+
+    const int scale_y_plane_length = scale_height * scale_width;
+    const int scale_uv_plane_length = scale_y_plane_length / 4;
+    const int scale_buffer_length = scale_y_plane_length + scale_uv_plane_length * 2;
+    std::unique_ptr<uint8_t> scale_buffer(new uint8_t[scale_buffer_length]);
+
+    libyuv::I420Scale(
+            buffer.get(),
+            width,
+            buffer.get() + y_plane_length,
+            width / 2,
+            buffer.get() + y_plane_length + uv_plane_length,
+            width / 2,
+            width,
+            height,
+            scale_buffer.get(),
+            scale_width,
+            scale_buffer.get() + scale_y_plane_length,
+            scale_width / 2,
+            scale_buffer.get() + scale_y_plane_length + scale_uv_plane_length,
+            scale_width / 2,
+            scale_width,
+            scale_height,
+            libyuv::kFilterNone
+    );
+
+    const int rotate_y_plane_length = scale_height * scale_width;
+    const int rotate_uv_plane_length = rotate_y_plane_length / 4;
+    const int rotate_buffer_length = rotate_y_plane_length + rotate_uv_plane_length * 2;
+    std::unique_ptr<uint8_t> rotate_buffer(new uint8_t[rotate_buffer_length]);
+
+    libyuv::I420Rotate(
+            scale_buffer.get(),
+            scale_width,
+            scale_buffer.get() + scale_y_plane_length,
+            scale_width / 2,
+            scale_buffer.get() + scale_y_plane_length + scale_uv_plane_length,
+            scale_width / 2,
+            rotate_buffer.get(),
+            scale_height,
+            rotate_buffer.get() + rotate_y_plane_length,
+            scale_height / 2,
+            rotate_buffer.get() + rotate_y_plane_length + rotate_uv_plane_length,
+            scale_height / 2,
+            scale_width,
+            scale_height,
+            (libyuv::RotationMode) degree
+    );
+
+
+    libyuv::I420ToARGB(
+            rotate_buffer.get(),
+            scale_width,
+            rotate_buffer.get() + rotate_y_plane_length,
+            scale_width / 2,
+            rotate_buffer.get() + rotate_y_plane_length + rotate_uv_plane_length,
+            scale_width / 2,
+            argb,
+            scale_width * 4,
+            scale_width,
+            scale_height
+    );
+
+
+    for (int i = 0; i < scale_width * scale_height * 4; i += 4) {
+        int b = (argb[i]) & 0xFF;
+        int g = (argb[i + 1]) & 0xFF;
+        int r = (argb[i + 2]) & 0xFF;
+
+        input_data[i / 4] = r;
+        input_data[i / 4 + scale_width * scale_height] = g;
+        input_data[i / 4 + scale_width * scale_height * 2] = b;
     }
-    if (w < IMG_W) {
-        iter_w = w;
-    }
 
-    for (auto i = 0; i < iter_h; ++i) {
-        jbyte* Y_row = &Y_data[(h_offset + i) * w];
-        jbyte* U_row = &U_data[(h_offset + i) / 2 * rowStride];
-        jbyte* V_row = &V_data[(h_offset + i) / 2 * rowStride];
-        for (auto j = 0; j < iter_w; ++j) {
-            // Tested on Pixel and S7.
-            char y = Y_row[w_offset + j];
-            char u = U_row[pixelStride * ((w_offset+j)/pixelStride)];
-            char v = V_row[pixelStride * ((w_offset+j)/pixelStride)];
-
-            float b_mean = 104.00698793f;
-            float g_mean = 116.66876762f;
-            float r_mean = 122.67891434f;
-
-            auto b_i = 0 * IMG_H * IMG_W + j * IMG_W + i;
-            auto g_i = 1 * IMG_H * IMG_W + j * IMG_W + i;
-            auto r_i = 2 * IMG_H * IMG_W + j * IMG_W + i;
-
-            if (infer_HWC) {
-                b_i = (j * IMG_W + i) * IMG_C;
-                g_i = (j * IMG_W + i) * IMG_C + 1;
-                r_i = (j * IMG_W + i) * IMG_C + 2;
-            }
-/*
-  R = Y + 1.402 (V-128)
-  G = Y - 0.34414 (U-128) - 0.71414 (V-128)
-  B = Y + 1.772 (U-V)
- */
-            input_data[r_i] = -r_mean + (float) ((float) min(255., max(0., (float) (y + 1.402 * (v - 128)))));
-            input_data[g_i] = -g_mean + (float) ((float) min(255., max(0., (float) (y - 0.34414 * (u - 128) - 0.71414 * (v - 128)))));
-            input_data[b_i] = -b_mean + (float) ((float) min(255., max(0., (float) (y + 1.772 * (u - v)))));
-
-        }
-    }
 
     caffe2::TensorCPU input = caffe2::Tensor(1,caffe2::DeviceType::CPU);
 
-    if (infer_HWC) {
-        input.Resize(std::vector<int>({IMG_H, IMG_W, IMG_C}));
-    } else {
-        input.Resize(std::vector<int>({1, IMG_C, IMG_H, IMG_W}));
-    }
-
+    input.Resize(std::vector<int>({1, IMG_C, IMG_H, IMG_W}));
 
 
     memcpy(input.mutable_data<float>(), input_data, IMG_H * IMG_W * IMG_C * sizeof(float));
@@ -370,6 +424,10 @@ Java_com_ufo_aicamera_MainActivity_predFromCaffe2(
     total_fps += fps;
     avg_fps = total_fps / iters_fps;
     total_fps -= avg_fps;
+
+
+    delete[] argb;
+
 
     constexpr int k = 5;
     float max[k] = {0};
@@ -399,6 +457,11 @@ Java_com_ufo_aicamera_MainActivity_predFromCaffe2(
     for (auto j = 0; j < k; ++j) {
         stringStream << j << ": " << imagenet_classes[max_index[j]] << " - " << max[j] / 10 << "%\n";
     }
+
+    env->ReleaseByteArrayElements(u, u_buff, JNI_ABORT);
+    env->ReleaseByteArrayElements(v, v_buff, JNI_ABORT);
+    env->ReleaseByteArrayElements(y, y_buff, JNI_ABORT);
+
     return env->NewStringUTF(stringStream.str().c_str());
 }
 
